@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Submit Data</title>
+</head>
+<body style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 50vh;">
+    <h1>Submit Your Info</h1>
+    <% if (error){ %>
+        <p style="color: red;">Error: <%= error %></p>
+    <% } %>
+    <form method="POST" action="/create-user">
+        <label>Name:</label><br>
+        <input type="text" name="name"><br><br>
+
+        <label>Email:</label><br>
+        <input type="email" name="email"><br><br>
+
+        <button type="submit">Submit</button>
+    </form>
+</body>
+</html>

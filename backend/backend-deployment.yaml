@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: express-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+      - name: flaskp-td-backend
+        image: pankajdocker1997/flaskp-td-backend:latest
+        ports:
+        - containerPort: 8000
+        env:
+        - name: MONGO_URI
+          value: "mongodb://mongo-service:27017"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "250m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+spec:
+  selector:
+    app: backend
+  ports:
+    - protocol: TCP
+      port: 8000        # Service port exposed inside the cluster
+      targetPort: 8000  # Matches the containerPort of your backend
+  type: ClusterIP

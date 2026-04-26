@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flask-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+      - name: flaskp-td-frontend
+        image: pankajdocker1997/flaskp-td-frontend:latest
+        ports:
+        - containerPort: 3000
+        env:
+        - name: BACKEND_URL
+          value: "http://backend-service:8000"
+        - name: MONGO_URI
+          value: "mongodb://mongo-service:27017/"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "250m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-service
+spec:
+  selector:
+    app: frontend
+  ports:
+    - protocol: TCP
+      port: 3000        # NodePort exposed to outside cluster
+      targetPort: 3000  # Matches containerPort
+  type: NodePort
