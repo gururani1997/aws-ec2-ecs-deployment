@@ -12,6 +12,7 @@ collection = db.get_collection('py_users')
 load_dotenv()
 
 @app.route('/submit', methods=['POST'])
+@app.route('/api/submit', methods=['POST'])
 def submit():
     data = request.get_json()
     print(data)
