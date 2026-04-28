@@ -1,0 +1,429 @@
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                                                                              ║
+║         ░█████╗░░██╗░░░░░░░██╗░██████╗                                      ║
+║         ██╔══██╗░██║░░██╗░░██║██╔════╝                                      ║
+║         ███████║░╚██╗████╗██╔╝╚█████╗░                                      ║
+║         ██╔══██║░░████╔═████║░░╚═══██╗                                      ║
+║         ██║░░██║░░╚██╔╝░╚██╔╝░██████╔╝                                      ║
+║         ╚═╝░░╚═╝░░░╚═╝░░░╚═╝░░╚═════╝                                       ║
+║                                                                              ║
+║            D E P L O Y M E N T   G U I D E                                  ║
+║            Flask Backend  +  Express Frontend                                ║
+║                                                                              ║
+║   Author  :  Pankaj Gururani                                                 ║
+║   Region  :  ap-south-1 (Mumbai)                                             ║
+║   Stack   :  Flask · Express · MongoDB Atlas · Docker · AWS                  ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  WHAT WE BUILT                                                               │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  A full-stack application deployed on AWS in 3 different architectures:
+
+  ┌─────────┐     ┌──────────────────────────────────────────────────────┐
+  │  PART 1 │ ──► │  Both apps on a Single EC2 Instance                  │
+  ├─────────┤     ├──────────────────────────────────────────────────────┤
+  │  PART 2 │ ──► │  Flask and Express on Separate EC2 Instances         │
+  ├─────────┤     ├──────────────────────────────────────────────────────┤
+  │  PART 3 │ ──► │  Docker Containers on ECS Fargate via ECR + ALB      │
+  └─────────┘     └──────────────────────────────────────────────────────┘
+
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║   AWS SERVICES — WHAT AND WHY                                                ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+  ┌─ COMPUTE ──────────────────────────────────────────────────────────────────┐
+  │                                                                            │
+  │  ▸ EC2 (Elastic Compute Cloud)                                             │
+  │    Virtual server on AWS — used in Part 1 and 2 to host apps directly.   │
+  │                                                                            │
+  │  ▸ ECS (Elastic Container Service)                                         │
+  │    Runs and manages Docker containers — used in Part 3 with Fargate.     │
+  │                                                                            │
+  │  ▸ Fargate                                                                 │
+  │    Serverless engine for ECS — no EC2 to manage or patch manually.       │
+  │                                                                            │
+  └────────────────────────────────────────────────────────────────────────────┘
+
+  ┌─ NETWORKING ───────────────────────────────────────────────────────────────┐
+  │                                                                            │
+  │  ▸ VPC (Virtual Private Cloud)                                             │
+  │    Private isolated network — keeps all resources secure and grouped.    │
+  │                                                                            │
+  │  ▸ Subnet                                                                  │
+  │    Smaller network inside VPC tied to one Availability Zone.             │
+  │    ALB requires subnets in at least 2 AZs for high availability.         │
+  │                                                                            │
+  │  ▸ Internet Gateway                                                        │
+  │    Connects VPC to the public internet — without it nothing is reachable. │
+  │                                                                            │
+  │  ▸ Route Table                                                             │
+  │    Defines traffic paths — we route 0.0.0.0/0 to IGW for internet access.│
+  │                                                                            │
+  │  ▸ Security Group                                                          │
+  │    Acts as firewall — allows only specific ports 80, 3000, 8000, 22.     │
+  │                                                                            │
+  └────────────────────────────────────────────────────────────────────────────┘
+
+  ┌─ CONTAINERS ───────────────────────────────────────────────────────────────┐
+  │                                                                            │
+  │  ▸ ECR (Elastic Container Registry)                                        │
+  │    Private Docker image registry — ECS pulls images from here securely.  │
+  │                                                                            │
+  │  ▸ ECS Cluster                                                             │
+  │    Logical workspace that groups all ECS services and tasks together.    │
+  │                                                                            │
+  │  ▸ ECS Task Definition                                                     │
+  │    Blueprint for container — defines image, port, CPU, memory, env vars. │
+  │                                                                            │
+  │  ▸ ECS Service                                                             │
+  │    Keeps desired number of tasks running — auto-restarts on crash.       │
+  │                                                                            │
+  └────────────────────────────────────────────────────────────────────────────┘
+
+  ┌─ LOAD BALANCING ───────────────────────────────────────────────────────────┐
+  │                                                                            │
+  │  ▸ ALB (Application Load Balancer)                                         │
+  │    Single public URL that routes traffic to correct containers by path.  │
+  │                                                                            │
+  │  ▸ ALB Listener                                                            │
+  │    Listens on port 80 and applies routing rules to incoming requests.    │
+  │                                                                            │
+  │  ▸ Listener Rule                                                           │
+  │    Path-based rule — /api/* goes to Flask, /* goes to Express.           │
+  │                                                                            │
+  │  ▸ Target Group                                                            │
+  │    Group of container IPs that ALB forwards traffic to.                  │
+  │    Must be type IP for Fargate — ECS registers IPs automatically.        │
+  │                                                                            │
+  └────────────────────────────────────────────────────────────────────────────┘
+
+  ┌─ SECURITY AND MONITORING ──────────────────────────────────────────────────┐
+  │                                                                            │
+  │  ▸ IAM Role (ecsTaskExecutionRole)                                         │
+  │    Grants ECS permission to pull ECR images and write CloudWatch logs.   │
+  │                                                                            │
+  │  ▸ CloudWatch Logs                                                         │
+  │    Captures container stdout/stderr — only way to debug without SSH.     │
+  │                                                                            │
+  │  ▸ MongoDB Atlas                                                           │
+  │    Cloud-hosted database — local MongoDB unreachable from Fargate.       │
+  │                                                                            │
+  └────────────────────────────────────────────────────────────────────────────┘
+
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║   PART 1 — SINGLE EC2 DEPLOYMENT                                             ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+  ARCHITECTURE
+  ─────────────
+  Internet
+     │
+     ▼
+  EC2 Instance (Ubuntu 22.04)
+  ├── Express ──────────────────────────────────────────────────────── :3000
+  └── Flask ─────────────────────────────────── MongoDB Atlas ──────── :8000
+
+
+  STEP 1 ─ Launch EC2 Instance
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  Console       →  EC2  →  Launch Instance                               │
+  │  Name          :  flask-express-single                                  │
+  │  AMI           :  Ubuntu Server 22.04 LTS                               │
+  │  Instance Type :  t2.micro (free tier)                                  │
+  │  Security Group:  open ports 22, 3000, 8000                             │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+  STEP 2 ─ Connect to EC2
+    Console → EC2 → Connect → EC2 Instance Connect (browser terminal)
+
+  STEP 3 ─ Install Dependencies
+    $ sudo apt-get update -y
+    $ sudo apt-get install -y python3-pip python3-venv nodejs npm git
+    # Installs Python, Node.js, npm needed to run both apps on same machine
+
+  STEP 4 ─ Clone Repository
+    $ git clone https://github.com/gururani1997/aws-ec2-ecs-deployment.git
+    $ cd aws-ec2-ecs-deployment
+
+  STEP 5 ─ Setup and Start Flask Backend
+    $ cd backend
+    $ python3 -m venv venv
+    $ source venv/bin/activate
+    $ pip install -r requirements.txt
+    $ MONGO_URI="mongodb+srv://demouser:demouser@tasknode.9soyogs.mongodb.net/
+      MongoLearn?appName=TaskNode" nohup python3 app.py &
+    # Runs Flask on port 8000 in background with MongoDB Atlas connected
+
+  STEP 6 ─ Setup and Start Express Frontend
+    $ cd ../frontend
+    $ npm install
+    $ BACKEND_URL="http://localhost:8000" nohup node server.js &
+    # Runs Express on port 3000 pointing to Flask on the same machine
+
+  STEP 7 ─ Verify
+    $ curl http://localhost:3000
+    Open browser: http://<EC2-PUBLIC-IP>:3000  →  Express form loads ✅
+
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║   PART 2 — SEPARATE EC2 INSTANCES                                            ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+  ARCHITECTURE
+  ─────────────
+  Internet
+     │
+     ├──►  Flask EC2   (flask-sg: port 8000)  ──►  MongoDB Atlas
+     │
+     └──►  Express EC2 (node-sg: port 3000)
+                │
+                └──►  Calls Flask via Public IP
+
+
+  STEP 1 ─ Launch Flask EC2
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  Name          :  flask-backend                                         │
+  │  AMI           :  Ubuntu Server 22.04 LTS                               │
+  │  Security Group:  flask-sg  →  open ports 22 and 8000                  │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+  STEP 2 ─ Setup Flask EC2
+    $ sudo apt-get update -y
+    $ sudo apt-get install -y python3-pip python3-venv git
+    $ git clone https://github.com/gururani1997/aws-ec2-ecs-deployment.git
+    $ cd aws-ec2-ecs-deployment/backend
+    $ python3 -m venv venv && source venv/bin/activate
+    $ pip install -r requirements.txt
+    $ MONGO_URI="mongodb+srv://demouser:demouser@tasknode.9soyogs.mongodb.net/
+      MongoLearn?appName=TaskNode" nohup python3 app.py &
+
+  STEP 3 ─ Note Flask EC2 Public IP
+    Console → EC2 → flask-backend → copy Public IPv4 address
+
+  STEP 4 ─ Launch Express EC2
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  Name          :  express-frontend                                      │
+  │  AMI           :  Ubuntu Server 22.04 LTS                               │
+  │  Security Group:  node-sg  →  open ports 22 and 3000                   │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+  STEP 5 ─ Setup Express EC2
+    $ sudo apt-get update -y
+    $ sudo apt-get install -y nodejs npm git
+    $ git clone https://github.com/gururani1997/aws-ec2-ecs-deployment.git
+    $ cd aws-ec2-ecs-deployment/frontend
+    $ npm install
+    $ BACKEND_URL="http://<FLASK-EC2-PUBLIC-IP>:8000" nohup node server.js &
+    # Public IP used because browser is outside AWS — private IP wont work
+
+  STEP 6 ─ Verify
+    Open browser: http://<EXPRESS-EC2-PUBLIC-IP>:3000
+    Submit form   →  data saved in MongoDB Atlas ✅
+
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║   PART 3 — DOCKER + ECR + ECS FARGATE + ALB                                  ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+  ARCHITECTURE
+  ─────────────
+  Internet
+     │
+     ▼
+  ALB :80  ──  app-alb-console-734055432.ap-south-1.elb.amazonaws.com
+     │
+     ├──  /api/*  ──►  flask-tg-ip-new:8000  ──►  Flask Container  ──►  MongoDB
+     │
+     └──  /*      ──►  node-tg-ip-new:3000   ──►  Express Container
+
+
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │  PHASE 1  ─  NETWORKING                                                  │
+  └──────────────────────────────────────────────────────────────────────────┘
+
+  STEP 1 ─ Create VPC
+    Console → VPC → Create VPC
+    Name: ecs-vpc  |  CIDR: 10.0.0.0/16
+    ID  : vpc-02e23ca9ce0a81c13
+
+  STEP 2 ─ Create 2 Public Subnets
+    ecs-public-1  →  ap-south-1a  |  CIDR: 10.0.1.0/24
+    ecs-public-2  →  ap-south-1b  |  CIDR: 10.0.2.0/24
+    Enable Auto-assign Public IP on both subnets
+
+  STEP 3 ─ Create and Attach Internet Gateway
+    Name: ecs-igw  →  Attach to ecs-vpc
+
+  STEP 4 ─ Update Route Table
+    Add route  :  0.0.0.0/0  →  ecs-igw
+    Associate  :  both subnets
+
+
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │  PHASE 2  ─  DOCKER IMAGES                                               │
+  └──────────────────────────────────────────────────────────────────────────┘
+
+  STEP 5 ─ Login to ECR
+    $ aws ecr get-login-password --region ap-south-1 | \
+      docker login --username AWS --password-stdin \
+      030805793658.dkr.ecr.ap-south-1.amazonaws.com
+
+  STEP 6 ─ Build and Push Flask Image
+    $ cd backend
+    $ docker buildx build --platform linux/amd64 --push \
+      -t 030805793658.dkr.ecr.ap-south-1.amazonaws.com/flask-backend:latest .
+    # --platform linux/amd64 is REQUIRED on Mac M1/M2
+    # Fargate runs on x86_64 — arm64 image causes TaskFailedToStart error
+
+  STEP 7 ─ Build and Push Express Image
+    $ cd ../frontend
+    $ docker buildx build --platform linux/amd64 --push \
+      -t 030805793658.dkr.ecr.ap-south-1.amazonaws.com/express-frontend:latest .
+
+
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │  PHASE 3  ─  ECS SETUP                                                   │
+  └──────────────────────────────────────────────────────────────────────────┘
+
+  STEP 8 ─ Create Task Definition — Flask
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  Family     :  flask-task-console                                       │
+  │  CPU        :  0.5 vCPU   |   Memory  :  1 GB                          │
+  │  Exec Role  :  ecsTaskExecutionRole                                     │
+  │  Container  :  flask  |  flask-backend:latest  |  Port: 8000           │
+  │  Env Var    :  MONGO_URI = mongodb+srv://demouser:demouser@             │
+  │               tasknode.9soyogs.mongodb.net/MongoLearn?appName=TaskNode │
+  │  Logs       :  /ecs/flask-backend                                       │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+  STEP 9 ─ Create Task Definition — Express
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  Family     :  node-task-console                                        │
+  │  CPU        :  0.25 vCPU  |   Memory  :  0.5 GB                        │
+  │  Exec Role  :  ecsTaskExecutionRole                                     │
+  │  Container  :  node  |  express-frontend:latest  |  Port: 3000         │
+  │  Env Var    :  BACKEND_URL = http://app-alb-console-734055432.         │
+  │               ap-south-1.elb.amazonaws.com/api                         │
+  │  Logs       :  /ecs/express-frontend                                    │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │  PHASE 4  ─  LOAD BALANCER                                               │
+  └──────────────────────────────────────────────────────────────────────────┘
+
+  STEP 10 ─ Create Security Groups
+    alb-sg         →  port 80 from 0.0.0.0/0       (internet to ALB)
+    ecs-sg-console →  port 3000 and 8000 from 0.0.0.0/0  (ALB to containers)
+
+  STEP 11 ─ Create Target Groups  (type MUST be IP addresses for Fargate)
+    flask-tg-ip-new  →  port 8000  |  health check path: /
+    node-tg-ip-new   →  port 3000  |  health check path: /
+
+  STEP 12 ─ Create Application Load Balancer
+    Name     :  app-alb-console
+    Scheme   :  Internet-facing
+    VPC      :  ecs-vpc
+    Subnets  :  ecs-public-1 + ecs-public-2
+    SG       :  alb-sg
+    Listener :  HTTP:80  →  default  →  node-tg-ip-new
+
+  STEP 13 ─ Add Flask Listener Rule
+    ALB → Listeners → HTTP:80 → Add rule
+    Condition  :  Path = /api/*
+    Action     :  Forward to flask-tg-ip-new
+    Priority   :  1
+
+
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │  PHASE 5  ─  ECS SERVICES                                                │
+  └──────────────────────────────────────────────────────────────────────────┘
+
+  STEP 14 ─ Create Flask ECS Service
+    Service name  :  flask-service-console
+    Task def      :  flask-task-console
+    Launch type   :  Fargate  |  Desired tasks: 1
+    Subnets       :  ecs-public-1 + ecs-public-2
+    SG            :  ecs-sg-console  |  Public IP: ON
+    Target group  :  flask-tg-ip-new
+
+  STEP 15 ─ Create Express ECS Service
+    Service name  :  node-service-console
+    Task def      :  node-task-console
+    Launch type   :  Fargate  |  Desired tasks: 1
+    Subnets       :  ecs-public-1 + ecs-public-2
+    SG            :  ecs-sg-console  |  Public IP: ON
+    Target group  :  node-tg-ip-new
+
+
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │  PHASE 6  ─  VERIFY                                                      │
+  └──────────────────────────────────────────────────────────────────────────┘
+
+  STEP 16 ─ Check Services Status
+    $ aws ecs describe-services \
+      --cluster app-cluster \
+      --services flask-service-console node-service-console \
+      --region ap-south-1 \
+      --query 'services[*].{Name:serviceName,Running:runningCount,Desired:desiredCount}'
+    # Wait until Running == Desired == 1 for both services
+
+  STEP 17 ─ Test Endpoints
+    $ curl http://app-alb-console-734055432.ap-south-1.elb.amazonaws.com/
+    →  Returns Express HTML form ✅
+
+    $ curl -X POST \
+      http://app-alb-console-734055432.ap-south-1.elb.amazonaws.com/api/submit \
+      -H "Content-Type: application/json" \
+      -d '{"name":"Pankaj","email":"pankaj@test.com"}'
+    →  Returns {"message": "Data submitted successfully"} ✅
+
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║   COMMON ISSUES AND FIXES                                                    ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+  ┌─────────────────────────────────────────┬──────────────────────────────────┐
+  │  ISSUE                                  │  FIX                             │
+  ├─────────────────────────────────────────┼──────────────────────────────────┤
+  │  CannotPullContainerError               │  Push image to ECR first         │
+  ├─────────────────────────────────────────┼──────────────────────────────────┤
+  │  platform linux/amd64 not found         │  Add --platform linux/amd64 flag │
+  ├─────────────────────────────────────────┼──────────────────────────────────┤
+  │  Target group incompatible (awsvpc)     │  Use IP addresses type not       │
+  │                                         │  Instance type for Fargate       │
+  ├─────────────────────────────────────────┼──────────────────────────────────┤
+  │  503 Service Temporarily Unavailable    │  Check target group health and   │
+  │                                         │  ECS service assignment          │
+  ├─────────────────────────────────────────┼──────────────────────────────────┤
+  │  Form submit fails 503                  │  Fix BACKEND_URL or add          │
+  │                                         │  /api/submit route in Flask      │
+  ├─────────────────────────────────────────┼──────────────────────────────────┤
+  │  MONGO_URI is None — Flask crashes      │  Call load_dotenv() before       │
+  │                                         │  os.getenv() in app.py           │
+  ├─────────────────────────────────────────┼──────────────────────────────────┤
+  │  Exit code 137 — OOM killed             │  Increase task memory to 1024 MB │
+  ├─────────────────────────────────────────┼──────────────────────────────────┤
+  │  Health check failing 404               │  Add GET / route to Flask        │
+  │                                         │  returning HTTP 200              │
+  └─────────────────────────────────────────┴──────────────────────────────────┘
+
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                                                                              ║
+║   GitHub  :  https://github.com/gururani1997/aws-ec2-ecs-deployment          ║
+║   ALB URL :  http://app-alb-console-734055432.ap-south-1.elb.amazonaws.com  ║
+║                                                                              ║
+║   ────────────────────────────────────────────────────────────────────────   ║
+║   Submitted by  :  Pankaj Gururani                                           ║
+║   Region        :  ap-south-1  (Mumbai)                                      ║
+║   AWS Account   :  030805793658                                              ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
